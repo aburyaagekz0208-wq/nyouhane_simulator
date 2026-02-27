@@ -24,35 +24,42 @@
             box-sizing: border-box;
         }
         h2 { margin: 0 0 10px 0; font-size: 18px; text-align: center; color: #333; }
-        p { font-size: 13px; margin: 5px 0; color: #555; line-height: 1.4; }
-        .slider-container { margin-top: 15px; }
+        p { font-size: 12px; margin: 0 0 10px 0; color: #555; text-align: center; }
+        
+        /* モード切替ボタンのスタイル */
+        .mode-toggle { display: flex; gap: 5px; margin-bottom: 15px; background: #e0e0e0; padding: 4px; border-radius: 8px; }
+        .mode-toggle button {
+            flex: 1; padding: 10px 5px; font-size: 13px; cursor: pointer;
+            background-color: transparent; color: #555; border: none; border-radius: 6px; font-weight: bold;
+            transition: all 0.2s; -webkit-tap-highlight-color: transparent;
+        }
+        .mode-toggle button.active { background-color: #ffffff; color: #1976D2; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+
+        .slider-container { margin-top: 10px; }
         .slider-container label { display: block; font-size: 13px; margin-bottom: 5px; font-weight: bold; color: #333;}
         input[type=range] { width: 100%; box-sizing: border-box; cursor: pointer; }
+        
         .btn-group { display: flex; gap: 10px; margin-top: 15px; }
-        button {
-            flex: 1;
-            padding: 12px 10px; 
-            font-size: 14px;
-            cursor: pointer;
-            background-color: #4CAF50;
-            color: white;
-            border: none;
-            border-radius: 6px;
-            font-weight: bold;
-            transition: background-color 0.2s;
-            -webkit-tap-highlight-color: transparent;
+        .action-btn {
+            flex: 1; padding: 12px 10px; font-size: 14px; cursor: pointer;
+            background-color: #4CAF50; color: white; border: none; border-radius: 6px; font-weight: bold;
+            transition: background-color 0.2s; -webkit-tap-highlight-color: transparent;
         }
-        button:hover { background-color: #45a049; }
-        button.active { background-color: #ff9800; }
-        button.danger { background-color: #f44336; }
-        button.danger:hover { background-color: #da190b; }
+        .action-btn:hover { background-color: #45a049; }
+        .action-btn.active { background-color: #ff9800; }
+        .action-btn.danger { background-color: #f44336; }
+        .action-btn.danger:hover { background-color: #da190b; }
     </style>
 </head>
 <body>
     <div id="ui" onmousedown="event.stopPropagation();" ontouchstart="event.stopPropagation();">
         <h2>尿はねシミュレーター</h2>
-        <p>1. 画面をなぞって便器を描く</p>
-        <p>2. 排尿を開始し、角度を変える</p>
+        <p>スマホでも快適に操作できます</p>
+        
+        <div class="mode-toggle">
+            <button id="modeDraw" class="active">✏️ 線を描く</button>
+            <button id="modeAim">🎯 角度を変える</button>
+        </div>
         
         <div class="slider-container">
             <label for="speedSlider">尿の勢い: <span id="speedValue">18</span></label>
@@ -60,8 +67,8 @@
         </div>
 
         <div class="btn-group">
-            <button id="toggleUrine">排尿開始</button>
-            <button id="clearLines" class="danger">線を消す</button>
+            <button id="toggleUrine" class="action-btn">排尿開始</button>
+            <button id="clearLines" class="action-btn danger">線を消す</button>
         </div>
     </div>
 
@@ -74,23 +81,14 @@
               Vector = Matter.Vector,
               Body = Matter.Body;
 
-        const engine = Engine.create({
-            positionIterations: 10,
-            velocityIterations: 10
-        });
-        
+        const engine = Engine.create({ positionIterations: 10, velocityIterations: 10 });
         engine.gravity.y = 0.4; 
         const world = engine.world;
         
         const render = Render.create({
             element: document.body,
             engine: engine,
-            options: {
-                width: window.innerWidth,
-                height: window.innerHeight,
-                wireframes: false,
-                background: '#ffffff'
-            }
+            options: { width: window.innerWidth, height: window.innerHeight, wireframes: false, background: '#ffffff' }
         });
 
         window.addEventListener('resize', () => {
@@ -100,103 +98,112 @@
 
         let drawnWalls = [];
 
-        const pivotPoint = { x: window.innerWidth < 500 ? 100 : 200, y: 300 };
-        let pointerPos = { x: window.innerWidth < 500 ? 300 : 500, y: 300 };
+        // スマホ画面を考慮した初期位置
+        const pivotPoint = { x: window.innerWidth < 500 ? 80 : 200, y: window.innerHeight < 700 ? 200 : 300 };
+        let pointerPos = { x: window.innerWidth < 500 ? 280 : 500, y: window.innerHeight < 700 ? 200 : 300 };
         
         const stick = Bodies.rectangle(pivotPoint.x + 50, pivotPoint.y, 100, 24, { 
-            chamfer: { radius: 12 }, 
-            collisionFilter: { group: -1 }, 
-            render: { fillStyle: '#00ff00' }
+            chamfer: { radius: 12 }, collisionFilter: { group: -1 }, render: { fillStyle: '#00ff00' }
         });
 
         const pivotConstraint = Constraint.create({
-            pointA: pivotPoint,
-            bodyB: stick,
-            pointB: { x: -50, y: 0 },
-            stiffness: 1,
-            length: 0,
-            render: { visible: false }
+            pointA: pivotPoint, bodyB: stick, pointB: { x: -50, y: 0 }, stiffness: 1, length: 0, render: { visible: false }
         });
 
         Composite.add(world, [stick, pivotConstraint]);
 
+        // --- モード管理 ---
+        let currentMode = 'draw'; // 'draw' または 'aim'
+        
+        document.getElementById('modeDraw').addEventListener('click', (e) => {
+            currentMode = 'draw';
+            e.target.classList.add('active');
+            document.getElementById('modeAim').classList.remove('active');
+        });
+        
+        document.getElementById('modeAim').addEventListener('click', (e) => {
+            currentMode = 'aim';
+            e.target.classList.add('active');
+            document.getElementById('modeDraw').classList.remove('active');
+        });
+
         // --- お絵かきロジック ---
         let isDrawing = false;
         let lastDrawPos = { x: 0, y: 0 };
-        
-        // 【修正1】精密計算により貫通がなくなったため、壁を極細(12px)に！
         const WALL_THICKNESS = 12; 
 
         function startDrawing(x, y) {
             isDrawing = true;
             lastDrawPos = { x, y };
             const startJoint = Bodies.circle(x, y, WALL_THICKNESS / 2, {
-                isStatic: true,
-                friction: 0.0,
-                render: { fillStyle: '#333333', strokeStyle: 'transparent' }
+                isStatic: true, friction: 0.0, render: { fillStyle: '#333333', strokeStyle: 'transparent' }
             });
             drawnWalls.push(startJoint);
             Composite.add(world, startJoint);
         }
 
-        function movePointer(x, y) {
-            pointerPos.x = x;
-            pointerPos.y = y;
+        function moveDrawing(x, y) {
+            if (!isDrawing) return;
+            const dx = x - lastDrawPos.x;
+            const dy = y - lastDrawPos.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
 
-            if (isDrawing) {
-                const dx = pointerPos.x - lastDrawPos.x;
-                const dy = pointerPos.y - lastDrawPos.y;
-                const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist > 15) { 
+                const midX = lastDrawPos.x + dx / 2;
+                const midY = lastDrawPos.y + dy / 2;
+                const angle = Math.atan2(dy, dx);
 
-                // 【修正2】生成間隔を短く(15px)し、角を極力減らして滑らかに
-                if (dist > 15) { 
-                    const midX = lastDrawPos.x + dx / 2;
-                    const midY = lastDrawPos.y + dy / 2;
-                    const angle = Math.atan2(dy, dx);
+                const wallSegment = Bodies.rectangle(midX, midY, dist, WALL_THICKNESS, {
+                    isStatic: true, angle: angle, friction: 0.0, render: { fillStyle: '#333333', strokeStyle: 'transparent' }
+                });
 
-                    const wallSegment = Bodies.rectangle(midX, midY, dist, WALL_THICKNESS, {
-                        isStatic: true,
-                        angle: angle,
-                        friction: 0.0,
-                        render: { fillStyle: '#333333', strokeStyle: 'transparent' }
-                    });
+                const joint = Bodies.circle(x, y, WALL_THICKNESS / 2, {
+                    isStatic: true, friction: 0.0, render: { fillStyle: '#333333', strokeStyle: 'transparent' }
+                });
 
-                    const joint = Bodies.circle(pointerPos.x, pointerPos.y, WALL_THICKNESS / 2, {
-                        isStatic: true,
-                        friction: 0.0,
-                        render: { fillStyle: '#333333', strokeStyle: 'transparent' }
-                    });
-
-                    drawnWalls.push(wallSegment, joint);
-                    Composite.add(world, [wallSegment, joint]);
-                    
-                    lastDrawPos = { x: pointerPos.x, y: pointerPos.y };
-                }
+                drawnWalls.push(wallSegment, joint);
+                Composite.add(world, [wallSegment, joint]);
+                lastDrawPos = { x, y };
             }
         }
 
         function endDrawing() { isDrawing = false; }
 
-        document.addEventListener('mousedown', (e) => {
-            if(e.target.closest('#ui')) return; 
-            startDrawing(e.clientX, e.clientY);
-        });
-        document.addEventListener('mousemove', (e) => { movePointer(e.clientX, e.clientY); });
-        document.addEventListener('mouseup', endDrawing);
+        // --- 入力イベント（マウス＆タッチ） ---
+        // 共通処理：ポインターの位置は常に更新し、描画モードの時だけ線を引く
+        
+        function handleStart(x, y) {
+            pointerPos.x = x; pointerPos.y = y;
+            if (currentMode === 'draw') startDrawing(x, y);
+        }
+        function handleMove(x, y) {
+            pointerPos.x = x; pointerPos.y = y;
+            if (currentMode === 'draw') moveDrawing(x, y);
+        }
+        function handleEnd() {
+            if (currentMode === 'draw') endDrawing();
+        }
 
+        // PC向け
+        document.addEventListener('mousedown', (e) => { if(e.target.closest('#ui')) return; handleStart(e.clientX, e.clientY); });
+        document.addEventListener('mousemove', (e) => { handleMove(e.clientX, e.clientY); });
+        document.addEventListener('mouseup', handleEnd);
+
+        // スマホ向け
         document.addEventListener('touchstart', (e) => {
             if(e.target.closest('#ui')) return;
             e.preventDefault();
-            startDrawing(e.touches[0].clientX, e.touches[0].clientY);
+            handleStart(e.touches[0].clientX, e.touches[0].clientY);
         }, { passive: false });
         document.addEventListener('touchmove', (e) => {
             e.preventDefault();
-            movePointer(e.touches[0].clientX, e.touches[0].clientY);
+            handleMove(e.touches[0].clientX, e.touches[0].clientY);
         }, { passive: false });
-        document.addEventListener('touchend', endDrawing);
-        document.addEventListener('touchcancel', endDrawing);
+        document.addEventListener('touchend', handleEnd);
+        document.addEventListener('touchcancel', handleEnd);
 
 
+        // --- UIボタンアクション ---
         let isUrinating = false;
         let frameCount = 0;
         const toggleButton = document.getElementById('toggleUrine');
@@ -217,12 +224,11 @@
             drawnWalls = [];
         });
 
-        // --- 【大改造】超精密・自前ループによるサブステップ計算 ---
-        // Matter.Runnerを使わず、自前でアニメーションを回します
+        // --- アニメーションループ ---
         (function run() {
             window.requestAnimationFrame(run);
 
-            // 1. 棒の角度更新
+            // 1. 棒の角度更新（ポインターを常に追従）
             const dx = pointerPos.x - pivotPoint.x;
             const dy = pointerPos.y - pivotPoint.y;
             const angle = Math.atan2(dy, dx);
@@ -239,14 +245,9 @@
                 const tipOffset = Vector.rotate({ x: 50, y: 0 }, stick.angle);
                 const tipPos = Vector.add(stick.position, tipOffset);
 
-                // 【修正3】壁が細くなったのに合わせて尿も細くし、跳ねないよう調整
                 const particle = Bodies.circle(tipPos.x, tipPos.y, 3.5, {
-                    restitution: 0.0,  // 全く反発させない
-                    friction: 0.0,     // ツルツル滑る
-                    frictionAir: 0.002,// 飛び出し後のリアルな失速
-                    density: 0.1,
-                    render: { fillStyle: '#ffcc00' }, 
-                    collisionFilter: { group: -2 } 
+                    restitution: 0.0, friction: 0.0, frictionAir: 0.002, density: 0.1,
+                    render: { fillStyle: '#ffcc00' }, collisionFilter: { group: -2 } 
                 });
 
                 const speed = parseFloat(speedSlider.value);
@@ -257,8 +258,7 @@
                 setTimeout(() => { Composite.remove(world, particle); }, 3000);
             }
 
-            // 3. 【貫通＆引っかかり防止の魔法】物理シミュレーションを4分割
-            // 1フレームの計算を4回に分けることで、高速な物体も絶対に壁をすり抜けません
+            // 3. 物理シミュレーションのサブステップ実行（貫通防止）
             const subSteps = 4;
             const subDelta = (1000 / 60) / subSteps;
             for (let i = 0; i < subSteps; i++) {
