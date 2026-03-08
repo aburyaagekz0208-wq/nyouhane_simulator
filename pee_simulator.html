@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>お絵かき尿はねシミュレーター</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+    <style>
+        body { margin: 0; padding: 0; overflow: hidden; background-color: #ffffff; touch-action: none; }
+        @media (hover: hover) and (pointer: fine) {
+            body { cursor: crosshair; }
+        }
+        canvas { display: block; }
+        #ui { 
+            position: absolute; 
+            top: 15px; left: 15px; 
+            background: rgba(245,245,245,0.95); 
+            padding: 15px; 
+            border-radius: 12px; 
+            box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+            font-family: sans-serif;
+            pointer-events: auto;
+            width: 280px; 
+            box-sizing: border-box;
+        }
+        h2 { margin: 0 0 10px 0; font-size: 18px; text-align: center; color: #333; }
+        p { font-size: 12px; margin: 0 0 10px 0; color: #555; text-align: center; }
+        
+        .mode-toggle { display: flex; gap: 5px; margin-bottom: 15px; background: #e0e0e0; padding: 4px; border-radius: 8px; }
+        .mode-toggle button {
+            flex: 1; padding: 10px 5px; font-size: 13px; cursor: pointer;
+            background-color: transparent; color: #555; border: none; border-radius: 6px; font-weight: bold;
+            transition: all 0.2s; -webkit-tap-highlight-color: transparent;
+        }
+        .mode-toggle button.active { background-color: #ffffff; color: #1976D2; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+
+        .slider-container { margin-top: 10px; }
+        .slider-container label { display: block; font-size: 13px; margin-bottom: 10px; font-weight: bold; color: #333;}
+        input[type=range] { 
+            width: 100%; box-sizing: border-box; cursor: pointer;
+            height: 24px; margin: 0; padding: 0;
+        }
+
+        .btn-group { display: flex; gap: 10px; margin-top: 15px; }
+        .action-btn {
+            flex: 1; padding: 12px 10px; font-size: 14px; cursor: pointer;
+            background-color: #4CAF50; color: white; border: none; border-radius: 6px; font-weight: bold;
+            transition: background-color 0.2s; -webkit-tap-highlight-color: transparent;
+        }
+        .action-btn:hover { background-color: #45a049; }
+        .action-btn.active { background-color: #ff9800; }
+        .action-btn.danger { background-color: #f44336; }
+        .action-btn.danger:hover { background-color: #da190b; }
+    </style>
+</head>
+<body>
+    <div id="ui" onmousedown="event.stopPropagation();" ontouchstart="event.stopPropagation();">
+        <h2>尿はねシミュレーター</h2>
+        <p>スマホでも快適に操作できます</p>
+        
+        <div class="mode-toggle">
+            <button id="modeDraw" class="active">✏️ 線を描く</button>
+            <button id="modeAim">🎯 角度を変える</button>
+        </div>
+        
+        <div class="slider-container">
+            <label for="speedSlider">尿の勢い: <span id="speedValue">18</span></label>
+            <input type="range" id="speedSlider" min="5" max="30" value="18">
+        </div>
+
+        <div class="btn-group">
+            <button id="toggleUrine" class="action-btn">排尿開始</button>
+            <button id="clearLines" class="action-btn danger">線を消す</button>
+        </div>
+    </div>
+
+    <script>
+        const Engine = Matter.Engine,
+              Render = Matter.Render,
+              Bodies = Matter.Bodies,
+              Composite = Matter.Composite,
+              Constraint = Matter.Constraint,
+              Vector = Matter.Vector,
+              Body = Matter.Body;
+
+        const engine = Engine.create({ positionIterations: 10, velocityIterations: 10 });
+        engine.gravity.y = 0.4; 
+        const world = engine.world;
+        
+        const render = Render.create({
+            element: document.body,
+            engine: engine,
+            options: { width: window.innerWidth, height: window.innerHeight, wireframes: false, background: '#ffffff' }
+        });
+
+        window.addEventListener('resize', () => {
+            render.canvas.width = window.innerWidth;
+            render.canvas.height = window.innerHeight;
+        });
+
+        let drawnWalls = [];
+
+        const pivotPoint = { x: window.innerWidth < 500 ? 80 : 200, y: window.innerHeight < 700 ? 200 : 300 };
+        let pointerPos = { x: window.innerWidth < 500 ? 280 : 500, y: window.innerHeight < 700 ? 200 : 300 };
+        
+        // --- 修正ポイント：isSensor を true にして当たり判定を消す ---
+        const stick = Bodies.rectangle(pivotPoint.x + 50, pivotPoint.y, 100, 24, { 
+            chamfer: { radius: 12 }, 
+            isSensor: true, // ← これを追加！(壁も尿もすり抜けるようになります)
+            render: { fillStyle: '#00ff00' }
+        });
+
+        const pivotConstraint = Constraint.create({
+            pointA: pivotPoint, bodyB: stick, pointB: { x: -50, y: 0 }, stiffness: 1, length: 0, render: { visible: false }
+        });
+
+        Composite.add(world, [stick, pivotConstraint]);
+
+        let currentMode = 'draw';
+        
+        document.getElementById('modeDraw').addEventListener('click', (e) => {
+            currentMode = 'draw';
+            e.target.classList.add('active');
+            document.getElementById('modeAim').classList.remove('active');
+        });
+        
+        document.getElementById('modeAim').addEventListener('click', (e) => {
+            currentMode = 'aim';
+            e.target.classList.add('active');
+            document.getElementById('modeDraw').classList.remove('active');
+        });
+
+        let isDrawing = false;
+        let lastDrawPos = { x: 0, y: 0 };
+        const WALL_THICKNESS = 12; 
+
+        function startDrawing(x, y) {
+            isDrawing = true;
+            lastDrawPos = { x, y };
+            const startJoint = Bodies.circle(x, y, WALL_THICKNESS / 2, {
+                isStatic: true, friction: 0.0, render: { fillStyle: '#333333', strokeStyle: 'transparent' }
+            });
+            drawnWalls.push(startJoint);
+            Composite.add(world, startJoint);
+        }
+
+        function moveDrawing(x, y) {
+            if (!isDrawing) return;
+            const dx = x - lastDrawPos.x;
+            const dy = y - lastDrawPos.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+
+            if (dist > 15) { 
+                const midX = lastDrawPos.x + dx / 2;
+                const midY = lastDrawPos.y + dy / 2;
+                const angle = Math.atan2(dy, dx);
+
+                const wallSegment = Bodies.rectangle(midX, midY, dist, WALL_THICKNESS, {
+                    isStatic: true, angle: angle, friction: 0.0, render: { fillStyle: '#333333', strokeStyle: 'transparent' }
+                });
+
+                const joint = Bodies.circle(x, y, WALL_THICKNESS / 2, {
+                    isStatic: true, friction: 0.0, render: { fillStyle: '#333333', strokeStyle: 'transparent' }
+                });
+
+                drawnWalls.push(wallSegment, joint);
+                Composite.add(world, [wallSegment, joint]);
+                lastDrawPos = { x, y };
+            }
+        }
+
+        function endDrawing() { isDrawing = false; }
+
+        function handleStart(x, y) {
+            pointerPos.x = x; pointerPos.y = y;
+            if (currentMode === 'draw') startDrawing(x, y);
+        }
+        function handleMove(x, y) {
+            pointerPos.x = x; pointerPos.y = y;
+            if (currentMode === 'draw') moveDrawing(x, y);
+        }
+        function handleEnd() {
+            if (currentMode === 'draw') endDrawing();
+        }
+
+        document.addEventListener('mousedown', (e) => { 
+            if(e.target.closest('#ui')) return; 
+            handleStart(e.clientX, e.clientY); 
+        });
+        document.addEventListener('mousemove', (e) => { 
+            if(e.target.closest('#ui')) return;
+            handleMove(e.clientX, e.clientY); 
+        });
+        document.addEventListener('mouseup', handleEnd);
+
+        document.addEventListener('touchstart', (e) => {
+            if(e.target.closest('#ui')) return;
+            e.preventDefault();
+            handleStart(e.touches[0].clientX, e.touches[0].clientY);
+        }, { passive: false });
+        document.addEventListener('touchmove', (e) => {
+            if(e.target.closest('#ui')) return;
+            e.preventDefault();
+            handleMove(e.touches[0].clientX, e.touches[0].clientY);
+        }, { passive: false });
+        document.addEventListener('touchend', handleEnd);
+        document.addEventListener('touchcancel', handleEnd);
+
+
+        let isUrinating = false;
+        let frameCount = 0;
+        const toggleButton = document.getElementById('toggleUrine');
+        const clearButton = document.getElementById('clearLines');
+        const speedSlider = document.getElementById('speedSlider');
+        const speedValue = document.getElementById('speedValue');
+
+        speedSlider.addEventListener('input', (e) => { speedValue.textContent = e.target.value; });
+
+        toggleButton.addEventListener('click', () => {
+            isUrinating = !isUrinating;
+            toggleButton.textContent = isUrinating ? "排尿停止" : "排尿開始";
+            toggleButton.classList.toggle('active', isUrinating);
+        });
+
+        clearButton.addEventListener('click', () => {
+            Composite.remove(world, drawnWalls);
+            drawnWalls = [];
+        });
+
+        (function run() {
+            window.requestAnimationFrame(run);
+
+            const dx = pointerPos.x - pivotPoint.x;
+            const dy = pointerPos.y - pivotPoint.y;
+            const angle = Math.atan2(dy, dx);
+            Body.setAngle(stick, angle);
+            
+            const stickLen = 100;
+            Body.setPosition(stick, {
+                x: pivotPoint.x + Math.cos(angle) * (stickLen / 2),
+                y: pivotPoint.y + Math.sin(angle) * (stickLen / 2)
+            });
+
+            if (isUrinating && frameCount++ % 2 === 0) {
+                const tipOffset = Vector.rotate({ x: 50, y: 0 }, stick.angle);
+                const tipPos = Vector.add(stick.position, tipOffset);
+
+                const particle = Bodies.circle(tipPos.x, tipPos.y, 3.5, {
+                    restitution: 0.0, friction: 0.0, frictionAir: 0.002, density: 0.1,
+                    render: { fillStyle: '#ffcc00' }, 
+                    // 尿同士もぶつからないように設定
+                    collisionFilter: { group: -1 } 
+                });
+
+                const speed = parseFloat(speedSlider.value);
+                const velocity = Vector.create(Math.cos(stick.angle) * speed, Math.sin(stick.angle) * speed);
+                Body.setVelocity(particle, velocity);
+                Composite.add(world, particle);
+
+                setTimeout(() => { Composite.remove(world, particle); }, 3000);
+            }
+
+            const subSteps = 4;
+            const subDelta = (1000 / 60) / subSteps;
+            for (let i = 0; i < subSteps; i++) {
+                Engine.update(engine, subDelta);
+            }
+
+            Render.world(render);
+        })();
+    </script>
+</body>
+</html>

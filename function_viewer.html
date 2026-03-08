@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>教育的関数ビュアー / Educational Function Viewer</title>
+    <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+    <script>
+        window.MathJax = {
+            tex: { inlineMath: [['$', '$'], ['\\(', '\\)']] },
+            startup: { typeset: false }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            background-color: #f4f6f9;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+        }
+        #header-container {
+            background-color: #2c3e50;
+            color: white;
+            padding: 10px 20px;
+            text-align: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            z-index: 20;
+        }
+        #header-container h1 {
+            margin: 0;
+            font-size: 1.2em;
+            font-weight: 600;
+            letter-spacing: 1px;
+        }
+        #formula-container {
+            padding: 10px;
+            background-color: #ffffff;
+            text-align: center;
+            font-size: clamp(0.8em, 2vw, 1.1em);
+            border-bottom: 1px solid #ddd;
+            z-index: 10;
+            overflow-x: auto;
+            white-space: nowrap;
+        }
+        #controls {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 10px;
+            padding: 15px 10px;
+            background-color: #e9ecef;
+            border-bottom: 1px solid #ddd;
+            z-index: 10;
+            max-height: 40vh;
+            overflow-y: auto;
+        }
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background: white;
+            padding: 8px 15px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            flex: 1 1 200px;
+        }
+        .control-group label {
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #333;
+            font-size: 0.85em;
+            text-align: center;
+        }
+        .control-group span {
+            color: #007bff;
+            font-weight: bold;
+            font-size: 1.1em;
+        }
+        input[type=range], select {
+            width: 100%;
+            cursor: pointer;
+            padding: 5px;
+        }
+        select {
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+        #graph-container {
+            flex-grow: 1;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="header-container">
+        <h1>教育的関数ビュアー / Educational Function Viewer</h1>
+    </div>
+
+    <div id="formula-container">
+        <div id="math-display"></div>
+    </div>
+
+    <div id="controls">
+        <div class="control-group">
+            <label>① 全体の高さ / Overall Height (Hall): <br><span id="val-hall">1.0</span></label>
+            <input type="range" id="slider-hall" min="0.1" max="3.0" step="0.1" value="1.0">
+        </div>
+        <div class="control-group">
+            <label>② ピークの径 / Peak Width (Wpeak): <br><span id="val-wpeak">1.0</span></label>
+            <input type="range" id="slider-wpeak" min="0.1" max="10.0" step="0.1" value="1.0">
+        </div>
+        <div class="control-group">
+            <label>③ ピークの高さ / Peak Height (Hpeak): <br><span id="val-hpeak">0.10</span></label>
+            <input type="range" id="slider-hpeak" min="0.0" max="1.0" step="0.01" value="0.1">
+        </div>
+        <div class="control-group">
+            <label>🎨 配色 / Color Theme:</label>
+            <select id="select-color">
+                <option value="Viridis" selected>デフォルト / Default (Viridis)</option>
+                <option value="custom">カスタム / Custom (#F1BB93)</option>
+            </select>
+        </div>
+    </div>
+
+    <div id="graph-container"></div>
+
+    <script>
+        const resolution = 100;
+        const x = [];
+        const y = [];
+        for (let i = 0; i < resolution; i++) {
+            x.push(-10 + (20 * i / (resolution - 1)));
+            y.push(-10 + (20 * i / (resolution - 1)));
+        }
+
+        const s_Hall = document.getElementById('slider-hall');
+        const s_Wpeak = document.getElementById('slider-wpeak');
+        const s_Hpeak = document.getElementById('slider-hpeak');
+        const s_Color = document.getElementById('select-color');
+        
+        const v_Hall = document.getElementById('val-hall');
+        const v_Wpeak = document.getElementById('val-wpeak');
+        const v_Hpeak = document.getElementById('val-hpeak');
+        const mathDisplay = document.getElementById('math-display');
+
+        function updateFormula(Hall, Wpeak, Hpeak) {
+            // ベース径部分の分母を 1000 に固定
+            const texString = `$$z = ${Hall} \\left[ \\left( e^{-\\frac{R_1^2}{1000}} + e^{-\\frac{R_2^2}{1000}} \\right) + ${Hpeak} \\left( e^{-\\frac{R_1^2}{${Wpeak}}} + e^{-\\frac{R_2^2}{${Wpeak}}} \\right) \\right]$$`;
+            mathDisplay.innerHTML = texString;
+            if (window.MathJax && window.MathJax.typesetPromise) {
+                MathJax.typesetPromise([mathDisplay]).catch(err => console.error(err));
+            }
+        }
+
+        function calculateZ(Hall, Wpeak, Hpeak) {
+            const z = [];
+            for (let i = 0; i < resolution; i++) {
+                let z_row = [];
+                for (let j = 0; j < resolution; j++) {
+                    let xv = x[j];
+                    let yv = y[i];
+                    let base1 = Math.pow(xv + 4, 2) + Math.pow(yv + 4, 2);
+                    let base2 = Math.pow(xv - 4, 2) + Math.pow(yv - 4, 2);
+                    
+                    // ベース径部分の分母を 1000 に固定
+                    let term1 = Math.exp(-Math.pow(base1, 2) / 1000);
+                    let term2 = Math.exp(-Math.pow(base2, 2) / 1000);
+                    
+                    let term3 = Hpeak * (Math.exp(-Math.pow(base1, 2) / Wpeak) + Math.exp(-Math.pow(base2, 2) / Wpeak));
+                    z_row.push(Hall * (term1 + term2 + term3));
+                }
+                z.push(z_row);
+            }
+            return z;
+        }
+
+        const graphLayout = {
+            autosize: true,
+            margin: { l: 0, r: 0, b: 0, t: 0 },
+            scene: {
+                xaxis: { title: 'X軸 / X' },
+                yaxis: { title: 'Y軸 / Y' },
+                zaxis: { title: 'Z軸 / Z', range: [0, 4] },
+                camera: { eye: { x: 1.5, y: 1.5, z: 1.2 } }
+            }
+        };
+
+        function updateGraph() {
+            const Hall = parseFloat(s_Hall.value);
+            const Wpeak = parseFloat(s_Wpeak.value);
+            const Hpeak = parseFloat(s_Hpeak.value);
+            const colorTheme = s_Color.value;
+
+            v_Hall.textContent = Hall.toFixed(1);
+            v_Wpeak.textContent = Wpeak.toFixed(1);
+            v_Hpeak.textContent = Hpeak.toFixed(2);
+
+            updateFormula(Hall.toFixed(1), Wpeak.toFixed(1), Hpeak.toFixed(2));
+
+            const zData = calculateZ(Hall, Wpeak, Hpeak);
+
+            let activeColorscale = 'Viridis';
+            if (colorTheme === 'custom') {
+                activeColorscale = [
+                    [0.0, '#fef6f0'],
+                    [0.2, '#F1BB93'],
+                    [1.0, '#c87941']
+                ];
+            } else {
+                activeColorscale = 'Viridis'; // デフォルト時の明示的な指定
+            }
+
+            const data = [{
+                z: zData,
+                x: x,
+                y: y,
+                type: 'surface',
+                colorscale: activeColorscale,
+                colorbar: { title: 'Z値 / Value', thickness: 15, len: 0.5 },
+                contours: {
+                    x: { show: false },
+                    y: { show: false },
+                    z: { show: false }
+                }
+            }];
+
+            Plotly.react('graph-container', data, graphLayout, {responsive: true});
+        }
+
+        [s_Hall, s_Wpeak, s_Hpeak, s_Color].forEach(el => {
+            el.addEventListener('input', updateGraph);
+        });
+
+        window.addEventListener('load', () => {
+            setTimeout(updateGraph, 500);
+        });
+    </script>
+</body>
+</html>
