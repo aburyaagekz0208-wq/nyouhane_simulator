@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>相関図クリエイター</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">相</div>
+          <div>
+            <h1>相関図クリエイター</h1>
+            <p>人物・キャラクター・SNS関係図</p>
+          </div>
+        </div>
+        <div class="top-actions" aria-label="プロジェクト操作">
+          <button class="icon-button" id="newProject" title="新規作成" aria-label="新規作成">
+            <span aria-hidden="true">＋</span>
+          </button>
+          <button class="danger-button compact-button" id="clearAll" title="すべて削除" aria-label="すべて削除">全削除</button>
+          <button class="icon-button" id="saveProject" title="JSON保存" aria-label="JSON保存">
+            <span aria-hidden="true">↓</span>
+          </button>
+          <label class="icon-button file-button" title="JSON読込" aria-label="JSON読込">
+            <span aria-hidden="true">↑</span>
+            <input id="loadProject" type="file" accept="application/json">
+          </label>
+          <button class="primary-button" id="exportPng">PNG書き出し</button>
+        </div>
+      </header>
+
+      <main class="workspace">
+        <aside class="panel left-panel" aria-label="追加と編集">
+          <section class="panel-section">
+            <h2>人物</h2>
+            <form id="personForm" class="form-stack">
+              <label>
+                <span>名前</span>
+                <input id="personName" type="text" placeholder="例：山田太郎" autocomplete="off" required>
+              </label>
+              <label class="upload-row">
+                <span>画像</span>
+                <input id="imageFile" type="file" accept="image/*">
+              </label>
+              <div class="paste-zone" id="pasteZone" tabindex="0">
+                <img id="pastePreview" alt="">
+                <span>スクショを貼り付け / 画像をドロップ</span>
+              </div>
+              <div class="inline-controls">
+                <label>
+                  <span>色</span>
+                  <input id="personColor" type="color" value="#2f8fff">
+                </label>
+                <button class="primary-button" type="submit">追加</button>
+              </div>
+            </form>
+          </section>
+
+          <section class="panel-section">
+            <h2>関係</h2>
+            <div class="link-guide" id="linkGuide">アイコンを2つクリックすると、選んだ関係で線を作成</div>
+            <form id="relationForm" class="form-stack">
+              <label>
+                <span>始点</span>
+                <select id="sourceNode" required></select>
+              </label>
+              <label>
+                <span>終点</span>
+                <select id="targetNode" required></select>
+              </label>
+              <label>
+                <span>コメント</span>
+                <input id="relationLabel" type="text" placeholder="例：親友 / ブロック / 推し">
+              </label>
+              <div class="segmented" role="group" aria-label="関係の種類">
+                <input id="typeFriend" name="relationType" type="radio" value="friend" checked>
+                <label for="typeFriend">好意</label>
+                <input id="typeWarn" name="relationType" type="radio" value="warning">
+                <label for="typeWarn">注意</label>
+                <input id="typeBlock" name="relationType" type="radio" value="block">
+                <label for="typeBlock">対立</label>
+                <input id="typeInfo" name="relationType" type="radio" value="info">
+                <label for="typeInfo">情報</label>
+              </div>
+              <div class="inline-controls">
+                <label>
+                  <span>線色</span>
+                  <input id="relationColor" type="color" value="#34b75a">
+                </label>
+                <div class="preset-colors" data-target="relationColor" aria-label="線色プリセット">
+                  <button type="button" data-color="#f04f42" style="--swatch:#f04f42" aria-label="赤"></button>
+                  <button type="button" data-color="#2f8fff" style="--swatch:#2f8fff" aria-label="青"></button>
+                  <button type="button" data-color="#34b75a" style="--swatch:#34b75a" aria-label="緑"></button>
+                  <button type="button" data-color="#111827" style="--swatch:#111827" aria-label="黒"></button>
+                </div>
+                <label class="check-row">
+                  <input id="relationDashed" type="checkbox">
+                  <span>点線</span>
+                </label>
+                <label class="check-row">
+                  <input id="relationBidirectional" type="checkbox">
+                  <span>双方向</span>
+                </label>
+                <button class="primary-button" type="submit">追加</button>
+              </div>
+            </form>
+          </section>
+        </aside>
+
+        <section class="board-wrap" aria-label="相関図キャンバス">
+          <div class="board-toolbar">
+            <input id="chartTitle" type="text" value="相関図" aria-label="タイトル">
+            <div class="board-tools">
+              <button class="primary-button compact-button" id="addTextBox" title="テキスト追加" aria-label="テキスト追加">テキスト追加</button>
+              <button class="primary-button compact-button" id="arrangeLabels" title="コメント整列" aria-label="コメント整列">コメント整列</button>
+              <button class="tool-button" id="fitView" title="全体表示" aria-label="全体表示">□</button>
+              <button class="tool-button" id="zoomOut" title="縮小" aria-label="縮小">−</button>
+              <output id="zoomLabel" aria-live="polite">100%</output>
+              <button class="tool-button" id="zoomIn" title="拡大" aria-label="拡大">＋</button>
+            </div>
+          </div>
+          <div class="board-viewport" id="viewport">
+            <div class="board" id="board">
+              <svg class="edges" id="edges" width="1600" height="1000" viewBox="0 0 1600 1000" aria-hidden="true">
+                <defs>
+                  <marker id="arrowFriend" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+                    <path d="M0,0 L0,6 L9,3 z" fill="#34b75a"></path>
+                  </marker>
+                  <marker id="arrowWarn" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+                    <path d="M0,0 L0,6 L9,3 z" fill="#f2a41a"></path>
+                  </marker>
+                  <marker id="arrowBlock" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+                    <path d="M0,0 L0,6 L9,3 z" fill="#f04f42"></path>
+                  </marker>
+                  <marker id="arrowInfo" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+                    <path d="M0,0 L0,6 L9,3 z" fill="#2f8fff"></path>
+                  </marker>
+                </defs>
+                <g id="groupLayer"></g>
+                <g id="edgeLayer"></g>
+              </svg>
+              <div class="node-layer" id="nodeLayer"></div>
+              <div class="text-layer" id="textLayer"></div>
+            </div>
+          </div>
+        </section>
+
+        <aside class="panel right-panel" aria-label="選択項目">
+          <section class="panel-section">
+            <h2>選択</h2>
+            <div id="emptyInspector" class="empty-state">
+              <strong>未選択</strong>
+              <span>人物か関係ラベルを選択</span>
+            </div>
+
+            <form id="nodeInspector" class="form-stack hidden">
+              <label>
+                <span>名前</span>
+                <input id="editNodeName" type="text">
+              </label>
+              <label>
+                <span>画像を差し替え</span>
+                <input id="editNodeImageFile" type="file" accept="image/*">
+              </label>
+              <div class="paste-zone compact-paste-zone" id="editPasteZone" tabindex="0">
+                <img id="editPastePreview" alt="">
+                <span>スクショを貼り付けて差し替え</span>
+              </div>
+              <label>
+                <span>メモ</span>
+                <textarea id="editNodeNote" rows="3"></textarea>
+              </label>
+              <div class="inline-controls">
+                <label>
+                  <span>色</span>
+                  <input id="editNodeColor" type="color">
+                </label>
+                <button class="danger-button" id="deleteNode" type="button">削除</button>
+              </div>
+            </form>
+
+            <form id="edgeInspector" class="form-stack hidden">
+              <label>
+                <span>コメント</span>
+                <input id="editEdgeLabel" type="text">
+              </label>
+              <label>
+                <span>線色</span>
+                <input id="editEdgeColor" type="color">
+              </label>
+              <div class="preset-colors" data-target="editEdgeColor" aria-label="線色プリセット">
+                <button type="button" data-color="#f04f42" style="--swatch:#f04f42" aria-label="赤"></button>
+                <button type="button" data-color="#2f8fff" style="--swatch:#2f8fff" aria-label="青"></button>
+                <button type="button" data-color="#34b75a" style="--swatch:#34b75a" aria-label="緑"></button>
+                <button type="button" data-color="#111827" style="--swatch:#111827" aria-label="黒"></button>
+              </div>
+              <label class="check-row">
+                <input id="editEdgeDashed" type="checkbox">
+                <span>点線</span>
+              </label>
+              <label class="check-row">
+                <input id="editEdgeBidirectional" type="checkbox">
+                <span>双方向</span>
+              </label>
+              <button class="danger-button" id="deleteEdge" type="button">削除</button>
+            </form>
+
+            <form id="textInspector" class="form-stack hidden">
+              <label>
+                <span>テキスト</span>
+                <textarea id="editTextContent" rows="4"></textarea>
+              </label>
+              <div class="inline-controls">
+                <label>
+                  <span>サイズ</span>
+                  <input id="editTextSize" type="number" min="10" max="96" step="1">
+                </label>
+                <label>
+                  <span>文字色</span>
+                  <input id="editTextColor" type="color">
+                </label>
+                <label>
+                  <span>背景</span>
+                  <input id="editTextBackground" type="color">
+                </label>
+              </div>
+              <div class="segmented" role="group" aria-label="文字揃え">
+                <input id="textAlignLeft" name="textAlign" type="radio" value="left">
+                <label for="textAlignLeft">左</label>
+                <input id="textAlignCenter" name="textAlign" type="radio" value="center">
+                <label for="textAlignCenter">中央</label>
+                <input id="textAlignRight" name="textAlign" type="radio" value="right">
+                <label for="textAlignRight">右</label>
+              </div>
+              <button class="danger-button" id="deleteTextBox" type="button">削除</button>
+            </form>
+
+            <form id="groupInspector" class="form-stack hidden">
+              <label>
+                <span>グループ名</span>
+                <input id="editGroupName" type="text">
+              </label>
+              <label>
+                <span>囲み色</span>
+                <input id="editGroupColor" type="color">
+              </label>
+              <div class="preset-colors" data-target="editGroupColor" aria-label="囲み色プリセット">
+                <button type="button" data-color="#f04f42" style="--swatch:#f04f42" aria-label="赤"></button>
+                <button type="button" data-color="#2f8fff" style="--swatch:#2f8fff" aria-label="青"></button>
+                <button type="button" data-color="#34b75a" style="--swatch:#34b75a" aria-label="緑"></button>
+                <button type="button" data-color="#111827" style="--swatch:#111827" aria-label="黒"></button>
+              </div>
+              <button class="primary-button" id="addSelectedToGroup" type="button">選択人物を追加</button>
+              <button class="danger-button" id="deleteGroup" type="button">削除</button>
+            </form>
+          </section>
+
+          <section class="panel-section">
+            <h2>一覧</h2>
+            <div class="selection-summary" id="selectionSummary">Shiftクリックで複数選択</div>
+            <div class="group-tools">
+              <input id="groupName" type="text" placeholder="グループ名">
+              <input id="groupColor" type="color" value="#00a6a6" aria-label="グループ色">
+              <button class="primary-button" id="createGroup" type="button">囲む</button>
+            </div>
+            <div class="preset-colors group-preset-colors" data-target="groupColor" aria-label="グループ色プリセット">
+              <button type="button" data-color="#f04f42" style="--swatch:#f04f42" aria-label="赤"></button>
+              <button type="button" data-color="#2f8fff" style="--swatch:#2f8fff" aria-label="青"></button>
+              <button type="button" data-color="#34b75a" style="--swatch:#34b75a" aria-label="緑"></button>
+              <button type="button" data-color="#111827" style="--swatch:#111827" aria-label="黒"></button>
+            </div>
+            <div class="list" id="nodeList"></div>
+            <h2 class="subhead">グループ</h2>
+            <div class="list" id="groupList"></div>
+          </section>
+        </aside>
+      </main>
+    </div>
+
+    <template id="nodeTemplate">
+      <button class="person-node" type="button">
+        <img alt="">
+        <span class="node-name"></span>
+        <span class="node-note"></span>
+      </button>
+    </template>
+
+    <script src="app.js"></script>
+  </body>
+</html>
