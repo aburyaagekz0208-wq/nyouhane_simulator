@@ -1,0 +1,32 @@
+{
+  "notice": "イベント情報は変動します。日程・内容は公開前に公式Xで最新を確認してください。",
+  "events": [
+    {
+      "id": "event_nurse_day",
+      "title": "ナースday",
+      "date": "2026-06-13",
+      "summary": "小悪魔ナースなお姫様たちがお出迎え。テーマ衣装の特別な一日。",
+      "image_id": "RAIVEN_promo_placeholder",
+      "source_url": "https://x.com/RAIVEN_shinjuku",
+      "status": "sample"
+    },
+    {
+      "id": "event_garter_day",
+      "title": "ガーターday",
+      "date": "2026-06-19",
+      "summary": "少し妖しげなガーター衣装のテーマデー。甘さの中のスパイスを。",
+      "image_id": "RAIVEN_promo_placeholder",
+      "source_url": "https://x.com/RAIVEN_shinjuku",
+      "status": "sample"
+    },
+    {
+      "id": "event_june_bride",
+      "title": "ジューンブライド",
+      "date": "2026-06-26",
+      "summary": "純白のお姫様たちと過ごす6月限定のブライドday。",
+      "image_id": "RAIVEN_promo_placeholder",
+      "source_url": "https://x.com/RAIVEN_shinjuku",
+      "status": "sample"
+    }
+  ]
+}
